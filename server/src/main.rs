@@ -8,6 +8,7 @@ mod api;
 
 // api user
 use api::{
+    carts::{add_cart_item, get_cart},
     products::{
         create_product, delete_product_id, get_product_by_id, get_products, update_product_by_id,
     },
@@ -53,7 +54,9 @@ async fn main() -> Result<(), std::io::Error> {
                     .service(get_product_by_id)
                     .service(create_product)
                     .service(delete_product_id)
-                    .service(update_product_by_id),
+                    .service(update_product_by_id)
+                    .service(get_cart)
+                    .service(add_cart_item),
             )
     })
     .bind(("localhost", port))?

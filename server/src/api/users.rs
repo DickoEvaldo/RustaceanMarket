@@ -34,7 +34,7 @@ use sha2::Sha256;
 // token struct
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TokenClaims {
-    user_id: Uuid,
+    pub user_id: Uuid,
     role: UserRole,
 }
 
