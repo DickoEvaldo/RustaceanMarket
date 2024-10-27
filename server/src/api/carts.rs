@@ -28,7 +28,6 @@ struct CartItem {
 
 #[derive(Serialize, Deserialize, FromRow)]
 struct CartItemBody {
-    cart_id: Option<Uuid>,
     product_id: Uuid,
     quantity: i32,
 }
@@ -93,12 +92,17 @@ impl Cart {
         .await
     }
 
-    async fn add_cart_item(pool: &PgPool, body: CartItemBody) -> Result<CartItem, sqlx::Error> {
+    async fn add_cart_item(
+        pool: &PgPool,
+        cart_id: Uuid,
+        product_id: Uuid,
+        quantity: i32,
+    ) -> Result<CartItem, sqlx::Error> {
         if let Some(cart_item) = sqlx::query_as!(
             CartItem,
             "SELECT * FROM cart_items WHERE cart_id = $1 AND product_id = $2",
-            body.cart_id,
-            body.product_id
+            cart_id,
+            product_id
         )
         .fetch_optional(pool)
         .await?
@@ -106,7 +110,7 @@ impl Cart {
             sqlx::query_as!(
                 CartItem,
                 "UPDATE cart_items SET quantity = $1 WHERE cart_item_id = $2 RETURNING *",
-                cart_item.quantity.unwrap_or(0) + body.quantity,
+                cart_item.quantity.unwrap_or(0) + quantity,
                 cart_item.cart_item_id
             )
             .fetch_one(pool)
@@ -114,9 +118,10 @@ impl Cart {
         } else {
             sqlx::query_as!(
                 CartItem,
-                "INSERT INTO cart_items (cart_id, product_id) VALUES ($1, $2) RETURNING *",
-                body.cart_id,
-                body.product_id
+                "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES ($1, $2, $3) RETURNING *",
+                cart_id,
+                product_id,
+                quantity
             )
             .fetch_one(pool)
             .await
@@ -148,22 +153,32 @@ pub async fn add_cart_item(
     req_user: Option<ReqData<TokenClaims>>,
 ) -> impl Responder {
     match req_user {
-        Some(user) => match Cart::get_or_create_cart(&state.db, user.user_id).await {
-            Ok(cart) => match Cart::add_cart_item(
-                &state.db,
-                CartItemBody {
-                    cart_id: Some(cart.cart_id),
-                    product_id: body.product_id,
-                    quantity: body.quantity,
-                },
-            )
-            .await
-            {
-                Ok(cart_with_items) => HttpResponse::Ok().json(cart_with_items),
+        Some(user) => {
+            // Get or create cart
+            match Cart::get_or_create_cart(&state.db, user.user_id).await {
+                Ok(cart) => {
+                    // Add item to cart
+                    match Cart::add_cart_item(
+                        &state.db,
+                        cart.cart_id, // No need for Some()
+                        body.product_id,
+                        body.quantity,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            // Get updated cart items
+                            match Cart::get_cart_with_items(&state.db, cart.cart_id).await {
+                                Ok(cart_items) => HttpResponse::Created().json(cart_items),
+                                Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+                            }
+                        }
+                        Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+                    }
+                }
                 Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
-            },
-            Err(e) => HttpResponse::Unauthorized().json(e.to_string()),
-        },
-        None => HttpResponse::Unauthorized().json("invalid user please log in"),
+            }
+        }
+        None => HttpResponse::Unauthorized().json("Please log in"),
     }
 }

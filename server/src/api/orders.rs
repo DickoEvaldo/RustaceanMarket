@@ -202,6 +202,7 @@ pub async fn get_all_user_orders(
     }
 }
 
+// post request to create order and order details
 #[post("api/orders")]
 pub async fn create_order(
     state: web::Data<AppState>,
