@@ -13,7 +13,7 @@ use api::{
     products::{
         create_product, delete_product_id, get_product_by_id, get_products, update_product_by_id,
     },
-    users::{auth, create_user, get_user, get_user_by_id, validator},
+    users::{auth, create_user, get_user, get_user_by_id, get_user_info, validator},
 };
 
 struct AppState {
@@ -51,6 +51,7 @@ async fn main() -> Result<(), std::io::Error> {
             .service(
                 web::scope("")
                     .wrap(bearer_middleware)
+                    .service(get_user_info)
                     .service(get_products)
                     .service(get_product_by_id)
                     .service(create_product)

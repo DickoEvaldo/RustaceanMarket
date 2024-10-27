@@ -3,7 +3,7 @@ use crate::AppState;
 use actix_web::{
     dev::ServiceRequest,
     get, post,
-    web::{self, Json},
+    web::{self, Json, ReqData},
     HttpMessage, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
@@ -150,6 +150,16 @@ impl User {
         // create new user
         sqlx::query_as!(UserResponse, "INSERT INTO users (first_name, last_name, email, password_hash, phone) VALUES ($1, $2, $3, $4, $5) RETURNING user_id, first_name, last_name, email, phone", new_user.first_name, new_user.last_name, new_user.email, hashed_password, new_user.phone).fetch_one(pool).await
     }
+
+    async fn get_user_info(pool: &PgPool, user_id: Uuid) -> Result<UserResponse, sqlx::Error> {
+        sqlx::query_as!(
+            UserResponse,
+            "SELECT user_id, first_name, last_name, email, phone FROM users WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(pool)
+        .await
+    }
 }
 
 // validator for bearer_middleware
@@ -184,7 +194,7 @@ pub async fn validator(
 }
 
 // get all user request
-#[get("/users")]
+#[get("/api/users")]
 pub async fn get_user(state: web::Data<AppState>) -> impl Responder {
     match User::get_all(&state.db).await {
         // return response 200 and users on sucess
@@ -195,7 +205,7 @@ pub async fn get_user(state: web::Data<AppState>) -> impl Responder {
 }
 
 // get request to get user by id
-#[get("/users/{id}")]
+#[get("api/users/{id}")]
 pub async fn get_user_by_id(
     state: web::Data<AppState>,
     user_id: web::Path<Uuid>,
@@ -211,7 +221,7 @@ pub async fn get_user_by_id(
 }
 
 // post request to create new user / register
-#[post("/users")]
+#[post("api/users")]
 pub async fn create_user(state: web::Data<AppState>, body: Json<CreateUserBody>) -> impl Responder {
     match User::create_user(&state.db, body).await {
         // return response 200 and users on sucess
@@ -221,7 +231,7 @@ pub async fn create_user(state: web::Data<AppState>, body: Json<CreateUserBody>)
     }
 }
 
-#[get("/auth")]
+#[get("api/auth")]
 pub async fn auth(state: web::Data<AppState>, credentials: BasicAuth) -> impl Responder {
     let jwt_secret: String = std::env::var("JWT_SECRET").expect("jwt secret must be set");
     let key: Hmac<Sha256> =
@@ -267,6 +277,21 @@ pub async fn auth(state: web::Data<AppState>, credentials: BasicAuth) -> impl Re
                 Err(err) => HttpResponse::InternalServerError().json(format!("{:?}", err)),
             }
         }
+    }
+}
+
+// get request to get current user information
+#[get("api/user_info")]
+pub async fn get_user_info(
+    state: web::Data<AppState>,
+    req_user: Option<ReqData<TokenClaims>>,
+) -> impl Responder {
+    match req_user {
+        Some(user) => match User::get_user_info(&state.db, user.user_id).await {
+            Ok(user_info) => HttpResponse::Ok().json(user_info),
+            Err(err) => HttpResponse::InternalServerError().json(format!("err:?")),
+        },
+        None => HttpResponse::Unauthorized().json("please log in first"),
     }
 }
 
