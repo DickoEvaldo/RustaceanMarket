@@ -31,19 +31,67 @@ struct Order {
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
+struct UpdateBody {
+    order_status: String,
+    order_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
 struct OrderBody {
     shipping_address: String,
 }
 
 impl Order {
+    // Retrieve all orders from current_user
+    async fn get_all_user_orders(pool: &PgPool, user_id: Uuid) -> Result<Vec<Order>, sqlx::Error> {
+        sqlx::query_as!(
+            Order,
+            r#"SELECT order_id, user_id, order_date, status as "status!: OrderStatus", shipping_address, created_at, total_amount FROM orders WHERE user_id = $1 ORDER BY created_at DESC"#
+        , user_id)
+        .fetch_all(pool)
+        .await
+    }
+
+    // admin
     // Retrieve all orders from the database
     async fn get_all_orders(pool: &PgPool) -> Result<Vec<Order>, sqlx::Error> {
         sqlx::query_as!(
-            Order,
-            r#"SELECT order_id, user_id, order_date, status as "status!: OrderStatus", shipping_address, created_at, total_amount FROM orders ORDER BY created_at DESC"#
+                Order,
+                r#"SELECT order_id, user_id, order_date, status as "status!: OrderStatus", shipping_address, created_at, total_amount FROM orders ORDER BY created_at DESC"#)
+            .fetch_all(pool)
+            .await
+    }
+
+    // admin
+    // update order status
+    async fn update_order_status(
+        pool: &PgPool,
+        order_id: Uuid,
+        order_status: String,
+    ) -> Result<(), sqlx::Error> {
+        let order = sqlx::query!("SELECT order_id FROM orders WHERE order_id = $1", order_id)
+            .fetch_optional(pool)
+            .await?;
+        if order.is_none() {
+            return Err(sqlx::Error::RowNotFound);
+        }
+
+        let order_status = match order_status.as_str() {
+            "Pending" => OrderStatus::Pending,
+            "Confirmed" => OrderStatus::Confirmed,
+            "Shipped" => OrderStatus::Shipped,
+            _ => OrderStatus::Pending,
+        };
+
+        sqlx::query!(
+            "UPDATE orders SET status = $1 WHERE order_id = $2",
+            order_status as OrderStatus,
+            order_id
         )
-        .fetch_all(pool)
-        .await
+        .execute(pool)
+        .await?;
+
+        Ok(())
     }
 
     // Create order
@@ -141,12 +189,12 @@ impl Order {
 
 // get request to retrieve all orders from the database
 #[get("api/orders")]
-pub async fn get_all_orders(
+pub async fn get_all_user_orders(
     state: web::Data<AppState>,
     req_user: Option<ReqData<TokenClaims>>,
 ) -> impl Responder {
     match req_user {
-        Some(_) => match Order::get_all_orders(&state.db).await {
+        Some(user) => match Order::get_all_user_orders(&state.db, user.user_id).await {
             Ok(products) => HttpResponse::Ok().json(products),
             Err(err) => HttpResponse::InternalServerError().json(format!("{err:?}")),
         },
@@ -175,5 +223,55 @@ pub async fn create_order(
             }
         }
         None => HttpResponse::Unauthorized().json("unauthorized"),
+    }
+}
+
+// admin only
+// get request to get all orders
+#[get("api/admin/orders")]
+pub async fn get_all_orders(
+    state: web::Data<AppState>,
+    req_user: Option<ReqData<TokenClaims>>,
+) -> impl Responder {
+    match req_user {
+        Some(user) => {
+            if user.is_admin() {
+                match Order::get_all_orders(&state.db).await {
+                    Ok(products) => HttpResponse::Ok().json(products),
+                    Err(err) => HttpResponse::InternalServerError().json(format!("{err:?}")),
+                }
+            } else {
+                HttpResponse::Unauthorized().json("customer not allowed to see all orders")
+            }
+        }
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
+    }
+}
+
+// put request to update the order status
+#[put("api/admin/order")]
+pub async fn update_order_status(
+    state: web::Data<AppState>,
+    req_user: Option<ReqData<TokenClaims>>,
+    body: Json<UpdateBody>,
+) -> impl Responder {
+    match req_user {
+        Some(user) => {
+            if user.is_admin() {
+                match Order::update_order_status(
+                    &state.db,
+                    body.order_id,
+                    body.order_status.clone(),
+                )
+                .await
+                {
+                    Ok(_) => HttpResponse::Ok().json("updated order successfully"),
+                    Err(err) => HttpResponse::InternalServerError().json(format!("{err:?}")),
+                }
+            } else {
+                HttpResponse::Unauthorized().json("customer not allowed to see all orders")
+            }
+        }
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
     }
 }
