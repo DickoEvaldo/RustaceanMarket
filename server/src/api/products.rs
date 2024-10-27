@@ -1,6 +1,6 @@
 use crate::{api::users::TokenClaims, AppState};
 use actix_web::{
-    delete, get, post,
+    delete, get, post, put,
     web::{self, Json, ReqData},
     HttpMessage, HttpResponse, Responder,
 };
@@ -82,6 +82,30 @@ impl Product {
             .await?;
         Ok(())
     }
+
+    // edit product
+    async fn edit_product_by_id(
+        pool: &PgPool,
+        product_id: Uuid,
+        body: Json<ProductBody>,
+    ) -> Result<Option<Product>, sqlx::Error> {
+        let new_product = body.into_inner();
+        sqlx::query_as!(
+            Product,
+            "UPDATE products 
+            SET name = $1, description = $2,
+            price = $3, stock_quantity = $4
+            WHERE product_id = $5 RETURNING *
+            ",
+            new_product.name,
+            new_product.description,
+            new_product.price,
+            new_product.stock_quantity,
+            product_id
+        )
+        .fetch_optional(pool)
+        .await
+    }
 }
 
 // get request to get all the products
@@ -100,7 +124,7 @@ pub async fn get_products(
 }
 
 // get request to get a product by id
-#[get("api/products/{id}")]
+#[get("api/product/{id}")]
 pub async fn get_product_by_id(
     state: web::Data<AppState>,
     product_id: web::Path<Uuid>,
@@ -139,7 +163,7 @@ pub async fn create_product(
 }
 
 // delete request to delete product by id
-#[delete("api/product")]
+#[delete("api/product/{id}")]
 pub async fn delete_product_id(
     state: web::Data<AppState>,
     req_user: Option<ReqData<TokenClaims>>,
@@ -154,6 +178,30 @@ pub async fn delete_product_id(
                 }
             } else {
                 HttpResponse::Forbidden().json("costumer cant delete product")
+            }
+        }
+        None => HttpResponse::InternalServerError().json("unable to verify indentity"),
+    }
+}
+
+// update product by id
+#[put("api/product/{id}")]
+pub async fn update_product_by_id(
+    state: web::Data<AppState>,
+    req_user: Option<ReqData<TokenClaims>>,
+    product_id: web::Path<Uuid>,
+    body: Json<ProductBody>,
+) -> impl Responder {
+    match req_user {
+        Some(user) => {
+            if user.is_admin() {
+                match Product::edit_product_by_id(&state.db, *product_id, body).await {
+                    Ok(Some(product)) => HttpResponse::Ok().json(product),
+                    Ok(None) => HttpResponse::Ok().json("invalid product_id"),
+                    Err(err) => HttpResponse::InternalServerError().json(format!("{err:?}")),
+                }
+            } else {
+                HttpResponse::Forbidden().json("costumer cant edit product")
             }
         }
         None => HttpResponse::InternalServerError().json("unable to verify indentity"),

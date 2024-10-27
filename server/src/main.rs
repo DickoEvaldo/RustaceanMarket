@@ -8,7 +8,9 @@ mod api;
 
 // api user
 use api::{
-    products::{create_product, delete_product_id, get_product_by_id, get_products},
+    products::{
+        create_product, delete_product_id, get_product_by_id, get_products, update_product_by_id,
+    },
     users::{auth, create_user, get_user, get_user_by_id, validator},
 };
 
@@ -50,7 +52,8 @@ async fn main() -> Result<(), std::io::Error> {
                     .service(get_products)
                     .service(get_product_by_id)
                     .service(create_product)
-                    .service(delete_product_id),
+                    .service(delete_product_id)
+                    .service(update_product_by_id),
             )
     })
     .bind(("localhost", port))?
