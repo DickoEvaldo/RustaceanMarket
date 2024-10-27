@@ -10,11 +10,11 @@ use sqlx::{types::Decimal, FromRow, PgPool};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, FromRow)]
-struct Cart {
-    cart_id: Uuid,
-    user_id: Option<Uuid>,
-    created_at: Option<DateTime<Utc>>,
-    updated_at: Option<DateTime<Utc>>,
+pub struct Cart {
+    pub cart_id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, Deserialize, FromRow)]
@@ -162,7 +162,7 @@ pub async fn add_cart_item(
                 Ok(cart_with_items) => HttpResponse::Ok().json(cart_with_items),
                 Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
             },
-            Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+            Err(e) => HttpResponse::Unauthorized().json(e.to_string()),
         },
         None => HttpResponse::Unauthorized().json("invalid user please log in"),
     }

@@ -113,7 +113,7 @@ impl User {
                 last_name, 
                 phone, 
                 email, 
-                role as "role!: UserRole"  -- Note the ! to make it non-null
+                role as "role!: UserRole" 
             FROM users 
             WHERE user_id = $1"#,
             user_id

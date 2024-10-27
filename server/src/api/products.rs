@@ -119,7 +119,7 @@ pub async fn get_products(
             Ok(products) => HttpResponse::Ok().json(products),
             Err(err) => HttpResponse::InternalServerError().json(format!("{err:?}")),
         },
-        None => HttpResponse::InternalServerError().json("unable to verify indentity"),
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
     }
 }
 
@@ -136,7 +136,7 @@ pub async fn get_product_by_id(
             Ok(None) => HttpResponse::Ok().json("product was not found"),
             Err(err) => HttpResponse::InternalServerError().json(format!("{err:?}")),
         },
-        None => HttpResponse::InternalServerError().json("unable to verify indentity"),
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
     }
 }
 
@@ -158,7 +158,7 @@ pub async fn create_product(
                 HttpResponse::Forbidden().json("costumer cant create product")
             }
         }
-        None => HttpResponse::InternalServerError().json("unable to verify indentity"),
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
     }
 }
 
@@ -180,7 +180,7 @@ pub async fn delete_product_id(
                 HttpResponse::Forbidden().json("costumer cant delete product")
             }
         }
-        None => HttpResponse::InternalServerError().json("unable to verify indentity"),
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
     }
 }
 
@@ -204,6 +204,6 @@ pub async fn update_product_by_id(
                 HttpResponse::Forbidden().json("costumer cant edit product")
             }
         }
-        None => HttpResponse::InternalServerError().json("unable to verify indentity"),
+        None => HttpResponse::Unauthorized().json("unable to verify indentity"),
     }
 }
